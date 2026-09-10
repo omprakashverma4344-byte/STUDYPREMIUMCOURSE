@@ -3,38 +3,30 @@
 // File: server.cjs
 // ============================================================
 
-require("dotenv").config();
+import dotenv from "dotenv";
+dotenv.config();
 
-const express = require("express");
-const cors = require("cors");
-const helmet = require("helmet");
-const compression = require("compression");
-// Mongoose is imported as ESM by src/worker.mjs and injected here before
-// this CommonJS backend is dynamically loaded. Cloudflare Workers' CommonJS
-// interop can expose mongoose through a namespace wrapper, so requiring it
-// directly here is not reliable.
-const mongoose = globalThis.__SPC_MONGOOSE__;
-
-if (
-  !mongoose ||
-  typeof mongoose.connect !== "function" ||
-  typeof mongoose.Schema !== "function"
-) {
-  throw new Error(
-    "Mongoose was not initialized by src/worker.mjs. Import mongoose as ESM before loading server.cjs."
-  );
-}
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import compression from "compression";
+// MongoDB is the database. Mongoose is the Node.js MongoDB library used by this backend.
+// Import it directly as ESM for Cloudflare Workers.
+import mongoose from "mongoose";
 
 const getMongooseConnection = () =>
   mongoose?.connection || mongoose?.connections?.[0] || null;
-const jwt = require("jsonwebtoken");
-const bcrypt = require("bcryptjs");
-const rateLimit = require("express-rate-limit");
-const Razorpay = require("razorpay");
-const crypto = require("crypto");
-const multer = require("multer");
+import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+import rateLimit from "express-rate-limit";
+import Razorpay from "razorpay";
+import crypto from "crypto";
+import multer from "multer";
 let nodemailer = null;
-try { nodemailer = require("nodemailer"); } catch {}
+try {
+  const nm = await import("nodemailer");
+  nodemailer = nm.default || nm;
+} catch {}
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -44,8 +36,7 @@ const ACCESS_TOKEN_SECRET =
   process.env.ACCESS_TOKEN_SECRET || JWT_SECRET;
 
 if (!JWT_SECRET) {
-  console.error("ERROR: JWT_SECRET is missing.");
-  process.exit(1);
+  console.warn("WARNING: JWT_SECRET is missing. Auth operations will fail until the Worker secret is configured.");
 }
 
 // ============================================================
@@ -886,9 +877,7 @@ async function b2DownloadStream(
     "private, no-store"
   );
 
-  const {
-    Readable
-  } = require("stream");
+  const { Readable } = await import("stream");
 
   Readable
     .fromWeb(response.body)
@@ -5032,8 +5021,4 @@ async function ensureDatabaseReady() {
 // API requests to Express.
 app.listen(PORT);
 
-module.exports = {
-  app,
-  PORT,
-  ensureDatabaseReady
-};
+export { app, PORT, ensureDatabaseReady };

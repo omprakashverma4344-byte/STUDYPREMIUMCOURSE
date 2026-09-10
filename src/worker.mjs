@@ -1,17 +1,13 @@
-import mongoose from "mongoose";
 import { env } from "cloudflare:workers";
 import { httpServerHandler } from "cloudflare:node";
 
-// Mongoose must be imported as ESM in Workers. The legacy Express backend is
-// CommonJS, so expose the real Mongoose singleton before dynamically loading it.
-globalThis.__SPC_MONGOOSE__ = mongoose;
 
 // Make Worker vars/secrets available to legacy Node packages through process.env.
 for (const [key, value] of Object.entries(env)) {
   if (typeof value === "string") process.env[key] = value;
 }
 
-const backend = await import("../server.cjs");
+const backend = await import("../server.mjs");
 const legacy = backend.default || backend;
 const port = Number(legacy.PORT || 10000);
 const expressHandler = httpServerHandler({ port });
