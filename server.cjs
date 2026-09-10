@@ -1,12 +1,10 @@
 // ============================================================
 // STUDY PREMIUM COURSE  - PRODUCTION BACKEND
-// File: server.js
+// File: server.cjs
 // ============================================================
 
 require("dotenv").config();
 
-const path = require("path");
-const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -37,8 +35,8 @@ if (!JWT_SECRET) {
 // DIRECTORIES
 // ============================================================
 
-const publicDir = path.join(__dirname, "public");
-const uploadsDir = path.join(publicDir, "uploads");
+// Cloudflare Workers has no __dirname/local persistent filesystem.
+// Static files are served by Workers Static Assets (wrangler.jsonc).
 
 
 // ============================================================
