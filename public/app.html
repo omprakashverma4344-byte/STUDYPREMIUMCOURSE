@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+
+  <meta name="theme-color" content="#08080a">
+
+  <meta name="description" content="STUDY PREMIUM COURSE App Details">
+
+  <title>App • STUDY PREMIUM COURSE </title>
+
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+
+  <!-- ================= HEADER ================= -->
+
+  <header class="detail-header">
+
+    <button class="back" onclick="history.back()" aria-label="Go back">
+      ‹
+    </button>
+
+    <b>App Store</b>
+
+    <div class="head-actions"><button class="icon-btn" onclick="location.href='/account.html'" title="My Batches">📚</button>
+
+      <button class="icon-btn" onclick="shareCurrentApp()" title="Share">
+        ↗
+      </button>
+
+    </div>
+
+  </header>
+
+
+  <!-- ================= APP DETAILS ================= -->
+
+  <main id="detail" class="detail">
+
+    <div class="loading">
+      Loading app...
+    </div>
+
+  </main>
+
+
+  <!-- ================= PAYMENT MODAL ================= -->
+
+  <div id="payModal" class="modal hidden">
+
+    <div class="modal-card">
+
+      <button class="close" onclick="closePay()" aria-label="Close">
+        ×
+      </button>
+
+
+      <h2>
+        Complete Payment
+      </h2>
+
+
+      <p id="payText">
+        Complete payment to continue.
+      </p>
+
+
+      <!-- CUSTOMER DETAILS -->
+
+      <input id="buyerName" type="text" placeholder="Your name" autocomplete="name">
+
+
+      <input id="buyerEmail" type="email" placeholder="Email" autocomplete="email">
+
+
+      <input id="buyerPhone" type="tel" placeholder="Mobile number" autocomplete="tel" maxlength="15">
+
+
+      <select id="paymentGateway" aria-label="Payment method">
+        <option value="cashfree">Cashfree - UPI / Cards / Net Banking</option>
+        <option value="upi_qr">UPI QR - Scan & Pay</option>
+        <option value="razorpay">Razorpay - UPI / Cards / Net Banking</option>
+      </select>
+
+
+      <button id="payButton" class="primary" onclick="startPayment()">
+        Pay & Continue
+      </button>
+
+
+      <small>
+        Cashfree/Razorpay payments are verified on the server.
+        QR payments require admin verification of the actual UPI transaction;
+        screenshots or fake UTRs never unlock access.
+      </small>
+
+    </div>
+
+  </div>
+
+
+
+
+  <!-- ================= UPI QR PAYMENT MODAL ================= -->
+
+  <div id="qrPayModal" class="modal hidden">
+    <div class="modal-card qr-payment-card">
+      <button class="close" onclick="closeQrPayment()" aria-label="Close">×</button>
+      <h2>Pay via UPI QR</h2>
+      <p id="qrPayText">Scan the QR and pay the exact amount.</p>
+      <div class="qr-image-wrap">
+        <img id="upiQrImage" src="/qr-payment.jpeg" alt="UPI payment QR code">
+      </div>
+      <p class="qr-security-note">
+        ⚠️ Do not close this page until payment is complete.
+        Access is unlocked only after the transaction is manually verified.
+      </p>
+      <input id="upiReference" type="text" placeholder="Enter UPI transaction/reference ID" autocomplete="off" maxlength="64">
+      <button id="upiSubmitButton" class="primary" onclick="submitUpiQrPayment()">I Have Paid — Submit Reference</button>
+      <small>Never enter your UPI PIN here. We only need the transaction/reference ID.</small>
+    </div>
+  </div>
+
+
+  <!-- ================= ALREADY PURCHASED ================= -->
+  <div id="alreadyPurchasedModal" class="modal hidden">
+    <div class="modal-card">
+      <button class="close" onclick="closeAlreadyPurchased()" aria-label="Close">×</button>
+      <h2>🔐 Already Purchased?</h2>
+      <p>Enter the same email and mobile number you used while paying. Access opens only after the payment is approved.</p>
+      <input id="restoreEmail" type="email" placeholder="Payment email" autocomplete="email">
+      <input id="restorePhone" type="tel" placeholder="Payment mobile number" autocomplete="tel" maxlength="15">
+      <button id="restoreAccessButton" class="primary" onclick="restorePurchasedAccess()">🔓 Open My Batch</button>
+      <small>Razorpay, Cashfree and admin-approved UPI QR purchases are checked on the server.</small>
+    </div>
+  </div>
+
+
+  <!-- ================= PAYMENT GATEWAYS ================= -->
+
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+
+
+  <!-- ================= APP SCRIPT ================= -->
+
+  <script src="/config.js"></script>
+  <script src="/app.js"></script>
+
+
+  <!-- ================= SHARE ================= -->
+
+  <script>
+
+    async function shareCurrentApp() {
+
+      try {
+
+        const url = window.location.href;
+
+        if (navigator.share) {
+
+          await navigator.share({
+            title: document.title,
+            text: "Check this app on STUDY PREMIUM COURSE",
+            url: url
+          });
+
+        } else {
+
+          await navigator.clipboard.writeText(url);
+
+          if (typeof toast === "function") {
+            toast("App link copied.");
+          } else {
+            alert("App link copied.");
+          }
+
+        }
+
+      } catch (error) {
+
+        console.log("Share cancelled.");
+
+      }
+
+    }
+
+  </script>
+
+</body>
+
+</html>

@@ -1,0 +1,36 @@
+CASHFREE SETUP - STUDY PREMIUM COURSE
+
+Render Environment Variables:
+CASHFREE_APP_ID=your_cashfree_app_id
+CASHFREE_SECRET_KEY=your_cashfree_secret_key
+CASHFREE_ENV=sandbox
+
+For live payments change:
+CASHFREE_ENV=production
+
+Keep existing variables too:
+MONGODB_URI
+JWT_SECRET
+ACCESS_TOKEN_SECRET (if already used)
+PUBLIC_URL
+RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET (only if keeping Razorpay enabled)
+
+Cashfree webhook URL:
+https://YOUR-RENDER-DOMAIN/api/payments/cashfree/webhook
+
+Enable Cashfree payment webhook events:
+- Payment Success
+- Payment Failed
+- Payment User Dropped
+
+IMPORTANT:
+- Whitelist your live website domain in the Cashfree dashboard before production checkout.
+- Never put CASHFREE_SECRET_KEY in frontend files or GitHub.
+- Test with CASHFREE_ENV=sandbox first.
+
+
+DONATION CASHFREE
+-----------------
+Cashfree donations use the same Cashfree webhook endpoint as course payments:
+/api/payments/cashfree/webhook
+No second webhook route is required. Set CASHFREE_APP_ID, CASHFREE_SECRET_KEY, CASHFREE_ENV and PUBLIC_URL in Render.

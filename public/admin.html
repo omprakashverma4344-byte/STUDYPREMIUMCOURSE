@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+
+  <meta name="theme-color" content="#08080a">
+
+  <meta name="robots" content="noindex,nofollow">
+
+  <title>STUDY PREMIUM COURSE  Admin</title>
+
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body class="admin-body">
+
+  <!-- =====================================================
+       ADMIN LOGIN
+  ====================================================== -->
+
+  <div id="adminLogin" class="auth-card">
+
+    <div class="brand center">
+
+      <div class="brand-mark">
+        P
+      </div>
+
+      <div>
+        <strong>STUDY PREMIUM COURSE </strong>
+        <small>ADMIN PANEL</small>
+      </div>
+
+    </div>
+
+
+    <h2>
+      Admin Login
+    </h2>
+
+
+    <input id="adminUser" type="text" placeholder="Username" autocomplete="username">
+
+
+    <input id="adminPass" type="password" placeholder="Password" autocomplete="current-password">
+
+
+    <input id="adminSecret" type="password" placeholder="Secret key" autocomplete="off">
+
+
+    <button class="primary" onclick="adminLogin()">
+      Login
+    </button>
+
+
+    <p id="loginMsg" class="error"></p>
+
+  </div>
+
+
+  <!-- =====================================================
+       ADMIN PANEL
+  ====================================================== -->
+
+  <div id="adminPanel" class="admin-panel hidden">
+
+    <!-- HEADER -->
+
+    <header class="admin-head">
+
+      <div>
+
+        <b>
+          STUDY PREMIUM COURSE 
+        </b>
+
+        <span>
+          Admin Dashboard
+        </span>
+
+      </div>
+
+
+      <button onclick="adminLogout()">
+        Logout
+      </button>
+
+    </header>
+
+
+    <!-- ===================================================
+         STATISTICS
+    ==================================================== -->
+
+    <section class="stats" id="stats">
+
+      <div class="stat">
+        <small>Apps</small>
+        <b>0</b>
+      </div>
+
+      <div class="stat">
+        <small>Orders</small>
+        <b>0</b>
+      </div>
+
+      <div class="stat">
+        <small>Paid Orders</small>
+        <b>0</b>
+      </div>
+
+      <div class="stat">
+        <small>Revenue</small>
+        <b>₹0</b>
+      </div>
+
+    </section>
+
+
+
+    <div class="advanced-nav">
+      <button class="adv-tab active" onclick="showAdvTab('analytics',this)">📊 Analytics</button>
+      <button class="adv-tab" onclick="showAdvTab('students',this)">👨‍🎓 Students</button>
+      <button class="adv-tab" onclick="showAdvTab('course',this)">📚 Course Progress</button>
+      <button class="adv-tab" onclick="showAdvTab('gateway',this)">💳 Gateway Reports</button>
+      <button class="adv-tab" onclick="showAdvTab('notifications',this)">🔔 Notifications</button>
+      <button class="adv-tab" onclick="showAdvTab('maintenance',this)">🛠️ Maintenance</button>
+      <button class="adv-tab" onclick="showAdvTab('backup',this)">💾 Backup</button>
+      <button class="adv-tab" onclick="showAdvTab('activity',this)">🧾 Activity</button>
+    </div>
+
+    <section id="adv-analytics" class="adv-view panel">
+      <div class="section-title"><h2>📊 Advanced Analytics</h2><button class="secondary adv-small" onclick="loadAdvancedAnalytics()">↻ Refresh</button></div>
+      <div id="advancedStats" class="stats adv-stats"></div>
+      <div class="advanced-grid"><div class="panel"><h3>🔥 Popular Batches</h3><div id="popularBatches"></div></div><div class="panel"><h3>💳 Gateway Performance</h3><div id="gatewayMini"></div></div></div>
+    </section>
+
+    <section id="adv-students" class="adv-view panel hidden">
+<div class="section-title"><h2>👨‍🎓 Student Management</h2><button class="secondary adv-small" onclick="loadStudents()">↻ Refresh</button></div>
+<div class="admin-subpanel"><h3>🔑 Grant / Manage Batch Access</h3><div class="form-grid">
+<input id="grantEmail" placeholder="Student email">
+<select id="grantApp"><option value="">Select Batch</option></select>
+
+</div><button class="primary" onclick="grantAccess()">🎓 Grant Access</button></div>
+<div class="admin-subpanel"><h3>🔎 Search Students</h3><input id="studentSearch" placeholder="Search name or email" oninput="debouncedStudents()"></div>
+<div id="studentRows"></div></section>
+
+    <section id="adv-course" class="adv-view panel hidden"><div class="section-title"><h2>📚 Course Progress & Lessons</h2><button class="secondary adv-small" onclick="loadLessons()">↻ Refresh</button></div><div class="lesson-form"><select id="lessonApp"></select><input id="lessonTitle" placeholder="Lesson title"><input id="lessonVideo" placeholder="Video URL"><input id="lessonMaterial" placeholder="Notes / PDF URL"><input id="lessonOrder" type="number" placeholder="Order"><textarea id="lessonDesc" placeholder="Lesson description"></textarea><button class="primary" onclick="createLesson()">+ Add Lesson</button></div><div id="lessonRows"></div></section>
+
+    <section id="adv-gateway" class="adv-view panel hidden"><div class="section-title"><h2>💳 Complete Gateway-wise Reporting</h2><button class="secondary adv-small" onclick="loadGatewayReport()">↻ Refresh</button></div><div id="gatewayReport"></div></section>
+
+    <section id="adv-notifications" class="adv-view panel hidden"><h2>🔔 Send Notification</h2><div class="form-grid"><select id="notifyAudience"><option value="all">All Students</option><option value="student">Specific Student (email)</option><option value="batch">Specific Batch (ID)</option></select><input id="notifyAudienceId" placeholder="Email or Batch ID (only if selected)"><input id="notifyTitle" placeholder="Notification title"><textarea id="notifyMessage" placeholder="Message"></textarea></div><button class="primary" onclick="sendAdminNotification()">Send Notification</button></section>
+
+    <section id="adv-maintenance" class="adv-view panel hidden"><h2>🛠️ Maintenance Mode</h2><p class="small-muted">Turn this on to show a maintenance screen to public users while admin remains accessible.</p><label class="check"><input id="maintenanceMode" type="checkbox"> Enable maintenance mode</label><label class="check"><input id="maintenanceAllowUsers" type="checkbox"> Allow users during maintenance</label><textarea id="maintenanceMessage" placeholder="Maintenance message"></textarea><button class="primary" onclick="saveMaintenance()">Save Maintenance Settings</button></section>
+
+    <section id="adv-backup" class="adv-view panel hidden"><h2>💾 Backup & Export</h2><p class="small-muted">Export apps, orders, students, ownerships, lessons and notifications into a JSON backup.</p><button class="primary" onclick="downloadBackup()">Download Full Backup</button></section>
+
+    <section id="adv-activity" class="adv-view panel hidden"><div class="section-title"><h2>🧾 Admin Activity Log</h2><button class="secondary adv-small" onclick="loadAudit()">↻ Refresh</button></div><div id="auditRows"></div></section>
+
+    <!-- ===================================================
+         APP MANAGEMENT
+    ==================================================== -->
+
+
+    <!-- ===================================================
+         LIVE WEBSITE ANALYTICS
+    ==================================================== -->
+    <section class="panel live-admin-panel">
+      <div class="section-title">
+        <h2>📊 Live Website Analytics</h2>
+        <span id="analyticsUpdated">Updating...</span>
+      </div>
+      <div class="stats analytics-stats">
+        <div class="stat"><small>🟢 Live Users</small><b id="liveUsersStat">0</b></div>
+        <div class="stat"><small>👥 Total Visitors</small><b id="totalVisitorsStat">0</b></div>
+        <div class="stat"><small>📅 Today</small><b id="todayVisitorsStat">0</b></div>
+      </div>
+      <div style="overflow:auto;margin-top:14px">
+        <table class="admin-table" style="width:100%">
+          <thead><tr><th>Status</th><th>Visitor</th><th>Page</th><th>Last Seen</th></tr></thead>
+          <tbody id="liveVisitorRows"><tr><td colspan="4">Loading live visitors...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="admin-grid">
+
+
+      <!-- ===============================================
+           ADD / EDIT APP
+      ================================================ -->
+
+      <div class="panel">
+
+        <h2 id="formTitle">
+          Add App / Course
+        </h2>
+
+
+        <input type="hidden" id="editId">
+        <input type="hidden" id="fLogoKey">
+        <input type="hidden" id="fBannerKey">
+        <input type="hidden" id="fScreenshotKeys">
+        <input type="hidden" id="fAppFileKey">
+        <input type="hidden" id="fAppFileName">
+        <input type="hidden" id="fAppFileMime">
+        <input type="hidden" id="fAppFileSize">
+
+
+        <div class="form-grid">
+
+
+          <!-- NAME -->
+
+          <input id="fName" type="text" placeholder="App / Course Name *">
+
+
+          <!-- DEVELOPER -->
+
+          <input id="fDeveloper" type="text" placeholder="Developer / Teacher">
+
+
+          <!-- CATEGORY -->
+
+          <input id="fCategory" type="text" placeholder="Category">
+
+
+          <!-- PRICE -->
+
+          <input id="fPrice" type="number" min="0" step="1" placeholder="Price (INR) — 0 = Free">
+
+
+          <!-- LOGO -->
+
+          <input id="fLogo" type="url" placeholder="App Icon / Logo URL">
+          <label class="upload-field">🖼️ Upload App Icon
+            <input id="fLogoFile" type="file" accept="image/*">
+          </label>
+
+
+          <!-- BANNER -->
+
+          <input id="fBanner" type="url" placeholder="Banner Image URL">
+          <label class="upload-field">🖼️ Upload Banner
+            <input id="fBannerFile" type="file" accept="image/*">
+          </label>
+
+
+          <!-- WEBSITE -->
+
+          <input id="fWebsite" type="url" placeholder="Website URL">
+
+
+          <!-- DOWNLOAD -->
+
+          <input id="fDownload" type="url" placeholder="Download / App URL (optional if APK uploaded)">
+          <label class="upload-field">📦 Upload APK to Backblaze B2
+            <input id="fApkFile" type="file" accept=".apk,application/vnd.android.package-archive">
+          </label>
+
+
+          <!-- VALIDITY -->
+
+          <input id="fValidity" type="text" placeholder="Validity e.g. Lifetime">
+
+
+          <!-- RATING -->
+
+          <input id="fRating" type="number" step="0.1" min="0" max="5" placeholder="Rating e.g. 4.8">
+
+
+          <!-- DESCRIPTION -->
+
+          <textarea id="fDescription" placeholder="Description"></textarea>
+
+
+          <!-- SCREENSHOTS -->
+
+          <textarea id="fScreenshots" placeholder="Screenshot URLs — one URL per line"></textarea>
+          <label class="upload-field upload-wide">📸 Upload Screenshots (multiple)
+            <input id="fScreenshotFiles" type="file" accept="image/*" multiple>
+          </label>
+
+        </div>
+
+
+        <!-- OPTIONS -->
+
+        <label class="check">
+
+          <input id="fFeatured" type="checkbox">
+
+          Featured
+
+        </label>
+
+
+        <label class="check">
+
+          <input id="fTrending" type="checkbox">
+
+          Trending
+
+        </label>
+
+
+        <label class="check">
+
+          <input id="fUpcoming" type="checkbox">
+
+          Upcoming
+
+        </label>
+
+
+        <label class="check">
+
+          <input id="fPublished" type="checkbox" checked>
+
+          Published
+
+        </label>
+
+
+        <!-- ACTIONS -->
+
+        <p class="upload-note">Uploaded files are stored in Backblaze B2. APK download is unlocked only after verified payment for paid apps.</p>
+
+        <div class="form-actions">
+
+          <button class="primary" onclick="saveApp()">
+            Save App
+          </button>
+
+
+          <button onclick="clearForm()">
+            Clear
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <!-- ===============================================
+           APP LIST
+      ================================================ -->
+
+      <div class="panel">
+
+        <h2>
+          Apps & Courses
+        </h2>
+
+
+        <div id="adminApps">
+
+          <p class="loading">
+            Loading...
+          </p>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ===================================================
+         PAYMENTS
+    ==================================================== -->
+
+    <div class="panel">
+
+      <h2>
+        💳 Recent Payments
+      </h2>
+
+
+      <div id="orders">
+
+        <p class="loading">
+          Loading payments...
+        </p>
+
+      </div>
+
+    </div>
+
+
+    <!-- ===================================================
+         CUSTOMER INFORMATION
+    ==================================================== -->
+
+    <div class="panel">
+
+      <h2>
+        👥 Customer / Buyer Information
+      </h2>
+
+
+      <p style="
+          color:#777;
+          font-size:13px;
+          line-height:1.6;
+        ">
+        Successful paid orders ke customer details
+        yahan show honge — Name, Email, Mobile,
+        purchased app/course, amount, payment status
+        aur date/time.
+      </p>
+
+
+      <div id="customers">
+
+        <p class="loading">
+          Loading customer information...
+        </p>
+
+      </div>
+
+    </div>
+
+
+    <div class="panel">
+      <h2>🎁 Batch Donation Requests</h2>
+      <p style="color:#777;font-size:13px;line-height:1.6">Verify recipient OTP first. Approved requests transfer the selected owned batch from donor to recipient automatically.</p>
+      <div id="donations"><p class="loading">Loading donation requests...</p></div>
+    </div>
+
+    <!-- ===================================================
+         WEBSITE CONTROL
+    ==================================================== -->
+
+    <div class="panel">
+
+      <h2>
+        ⚙️ Website Control
+      </h2>
+
+
+      <div class="form-grid">
+
+        <input id="siteTitle" placeholder="Website Title" value="STUDY PREMIUM COURSE">
+
+
+        <input id="siteTagline" placeholder="Website Tagline" value="LEARN • PREPARE • SUCCEED">
+
+      </div>
+
+
+      <div class="form-actions">
+
+        <button class="primary" onclick="saveWebsiteSettings()">
+          Save Settings
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+
+  <!-- =====================================================
+       ADMIN SCRIPT
+  ====================================================== -->
+
+  <script src="/config.js"></script>
+  <script src="/admin.js"></script>
+
+</body>
+
+</html>

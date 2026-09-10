@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+
+  <meta name="theme-color" content="#08080a">
+
+  <meta name="description" content="STUDY PREMIUM COURSE - Apps, courses and exam preparation in one place.">
+
+  <title>STUDY PREMIUM COURSE</title>
+
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+</head>
+
+<body>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <!-- ================= HEADER ================= -->
+
+  <header class="topbar">
+
+    <div class="brand">
+
+      <div class="brand-mark">
+        S
+      </div>
+
+      <div>
+        <strong id="siteBrandTitle">
+          STUDY PREMIUM COURSE
+        </strong>
+
+        <small id="siteBrandTagline">
+          LEARN • PREPARE • SUCCEED
+        </small>
+      </div>
+
+    </div>
+
+    <button class="icon-btn" onclick="location.href='/account.html'" title="My Batches">📚</button>
+<!-- 
+    <button class="icon-btn" onclick="location.href='/admin.html'" aria-label="Admin Panel" title="Admin Panel">
+
+      ⚙
+
+    </button> -->
+
+  </header>
+
+
+  <!-- ================= HOME ================= -->
+
+  <main id="homeView">
+
+    <!-- HERO -->
+
+    <section class="hero">
+
+      <div>
+
+        <span class="pill">
+          🔥 STUDY PREMIUM COURSE
+        </span>
+
+        <h1>
+          Everything for your<br>
+          <em>next selection.</em>
+        </h1>
+
+        <p>
+          Courses, learning apps and study resources —
+          all in one place.
+        </p>
+
+      </div>
+
+    </section>
+
+
+    <!-- SEARCH -->
+
+    <section class="search-row">
+
+      <span>⌕</span>
+
+      <input id="search" type="search" autocomplete="off" placeholder="Search your app or course..."
+        oninput="loadApps()">
+
+    </section>
+
+
+    <!-- CATEGORIES -->
+
+    <div id="categories" class="chips"></div>
+
+
+    <!-- APPS -->
+
+    <section>
+
+      <div class="section-title">
+
+        <h2>
+          🔥 Top Free Apps
+        </h2>
+
+        <span id="count"></span>
+
+      </div>
+
+
+      <div id="appList" class="app-list">
+
+        <div class="loading">
+          Loading...
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <section id="specialView" class="special-view hidden-force">
+    <div class="section-title"><h2 id="specialTitle">Upcoming</h2><span id="specialCount"></span></div>
+    <div id="specialList" class="app-list"></div>
+
+    <div id="donatePanel" class="donate-panel hidden-force">
+      <div class="donate-card">
+        <h2>❤️ Support STUDY PREMIUM COURSE</h2>
+        <p>Donate any amount securely using Razorpay or Cashfree. Your name and total contribution can appear on the leaderboard.</p>
+        <div class="donate-form-grid">
+          <input id="donorName" placeholder="Your name" maxlength="100">
+          <input id="donorEmail" type="email" placeholder="Email address">
+          <input id="donorAmount" type="number" min="1" step="1" placeholder="Amount (₹)">
+        </div>
+        <div class="donate-form-actions">
+          <button class="primary" onclick="startDonationPayment()">💳 Donate with Razorpay</button>
+          <button class="primary" onclick="startCashfreeDonationPayment()">💚 Donate with Cashfree</button>
+        </div>
+      </div>
+
+      <div class="donate-card">
+        <h2>🏆 Donation Leaderboard</h2>
+        <p class="small-muted">Highest total donor appears first.</p>
+        <div id="donationLeaderboard"><div class="loading">Loading...</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= BOTTOM NAV ================= -->
+
+  <nav class="bottom-nav">
+
+    <button class="active" onclick="showSection('apps')">
+
+      ▦
+      <span>Apps</span>
+
+    </button>
+
+
+    <button onclick="showSection('upcoming')">
+
+      ♧
+      <span>Upcoming</span>
+
+    </button>
+
+
+    <button onclick="showSection('favorites')">
+
+      ☆
+      <span>Favorites</span>
+
+    </button>
+
+
+    <button onclick="showSection('donate')">
+
+      ♡
+      <span>Donate</span>
+
+    </button>
+
+  </nav>
+
+
+  <!-- ================= APP SCRIPT ================= -->
+
+  <script src="/config.js"></script>
+  <script src="/app.js"></script>
+
+
+  <!-- ================= WEBSITE SETTINGS ================= -->
+  <script>
+    (async function loadSiteSettings() {
+      try {
+        const r = await fetch("/api/settings");
+        const s = await r.json();
+
+        if (s.tagline) {
+          document.getElementById("siteBrandTagline").textContent = s.tagline;
+        }
+      } catch { }
+
+      document.title = "STUDY PREMIUM COURSE";
+      const title = document.getElementById("siteBrandTitle");
+      if (title) title.textContent = "STUDY PREMIUM COURSE";
+    })();
+  </script>
+
+
+  <script>
+    function showComingSoon(name) {
+      if (typeof toast === "function") toast(name + " section coming soon.");
+      else alert(name + " section coming soon.");
+    }
+  </script>
+
+</body>
+
+</html>

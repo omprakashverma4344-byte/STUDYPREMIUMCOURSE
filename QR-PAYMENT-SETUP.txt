@@ -1,0 +1,9 @@
+STUDY PREMIUM COURSE - SECURE UPI QR PAYMENT
+
+1. The uploaded QR image is included at public/qr-payment.jpeg.
+2. QR payments create an order with status pending_verification after the customer submits the UPI transaction/reference ID.
+3. The browser can NEVER mark this order as paid.
+4. Admin must open the UPI/bank app, verify the exact amount and transaction reference, then click Verify & Approve in Admin -> Orders.
+5. Only a paid order can call /api/access/create and receive course access.
+6. Do NOT unlock access from screenshots or UTR text alone.
+7. Static UPI QR payments cannot be automatically confirmed by Cashfree. For fully automatic verification, use Cashfree's verified/dynamic payment flow.
