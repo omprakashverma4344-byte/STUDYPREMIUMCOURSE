@@ -10,7 +10,29 @@ const cors = require("cors");
 const helmet = require("helmet");
 const compression = require("compression");
 const mongooseModule = require("mongoose");
-const mongoose = mongooseModule?.default || mongooseModule;
+
+// Cloudflare Workers can wrap CommonJS packages in one or more ESM
+// `default` layers. Find the actual Mongoose singleton instead of assuming
+// a particular interop shape.
+function resolveMongoose(moduleValue) {
+  let candidate = moduleValue;
+  for (let i = 0; i < 5 && candidate; i += 1) {
+    if (
+      typeof candidate.connect === "function" &&
+      candidate.Schema &&
+      (candidate.connection || Array.isArray(candidate.connections))
+    ) {
+      return candidate;
+    }
+    candidate = candidate.default;
+  }
+  return moduleValue;
+}
+
+const mongoose = resolveMongoose(mongooseModule);
+
+const getMongooseConnection = () =>
+  mongoose?.connection || mongoose?.connections?.[0] || null;
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const rateLimit = require("express-rate-limit");
@@ -4967,7 +4989,8 @@ let databaseReadyPromise = null;
 let lastOwnershipExpiryCheck = 0;
 
 async function ensureDatabaseReady() {
-  if (mongoose.connection.readyState === 1) {
+  const activeConnection = getMongooseConnection();
+  if (activeConnection?.readyState === 1) {
     // Replace the old process-level interval with a lightweight,
     // request-triggered check that is safe in Cloudflare Workers.
     if (Date.now() - lastOwnershipExpiryCheck >= 60 * 1000) {
