@@ -3108,7 +3108,9 @@ async function expireBatchOwnerships() {
   );
 }
 
-setInterval(() => { expireBatchOwnerships().catch(() => {}); }, 60 * 1000);
+// Cloudflare Workers does not allow setInterval() in global scope.
+// Expiration is checked opportunistically from ensureDatabaseReady() instead.
+
 
 // ALREADY PURCHASED / RESTORE ACCESS
 // Works after Razorpay, Cashfree or admin-approved UPI QR payment.
@@ -4961,9 +4963,22 @@ async function ensurePurchasePlans(){
 // the first API request and the connection promise is reused by the isolate.
 
 let databaseReadyPromise = null;
+let lastOwnershipExpiryCheck = 0;
 
 async function ensureDatabaseReady() {
-  if (mongoose.connection.readyState === 1) return;
+  if (mongoose.connection.readyState === 1) {
+    // Replace the old process-level interval with a lightweight,
+    // request-triggered check that is safe in Cloudflare Workers.
+    if (Date.now() - lastOwnershipExpiryCheck >= 60 * 1000) {
+      lastOwnershipExpiryCheck = Date.now();
+      try {
+        await expireBatchOwnerships();
+      } catch (error) {
+        console.error("AUTO EXPIRE BATCH OWNERSHIPS ERROR:", error);
+      }
+    }
+    return;
+  }
   if (databaseReadyPromise) return databaseReadyPromise;
 
   databaseReadyPromise = (async () => {
@@ -4980,6 +4995,12 @@ async function ensureDatabaseReady() {
     await ensureSettings();
     await ensureDemoApps();
     await ensurePurchasePlans();
+    lastOwnershipExpiryCheck = Date.now();
+    try {
+      await expireBatchOwnerships();
+    } catch (error) {
+      console.error("AUTO EXPIRE BATCH OWNERSHIPS ERROR:", error);
+    }
   })().catch((error) => {
     databaseReadyPromise = null;
     throw error;
