@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "study-premium-course",
+  "name": "studypremiumcourse",
   "main": "src/worker.mjs",
   "compatibility_date": "2026-09-10",
   "assets": {

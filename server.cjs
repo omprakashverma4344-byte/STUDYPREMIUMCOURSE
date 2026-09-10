@@ -9,44 +9,21 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const compression = require("compression");
-const mongooseModule = require("mongoose");
+// Mongoose is imported as ESM by src/worker.mjs and injected here before
+// this CommonJS backend is dynamically loaded. Cloudflare Workers' CommonJS
+// interop can expose mongoose through a namespace wrapper, so requiring it
+// directly here is not reliable.
+const mongoose = globalThis.__SPC_MONGOOSE__;
 
-// Cloudflare Workers can wrap CommonJS packages in one or more ESM
-// `default` layers. Find the actual Mongoose singleton instead of assuming
-// a particular interop shape.
-function resolveMongoose(moduleValue) {
-  // Cloudflare can expose CommonJS/ESM packages through different wrapper
-  // shapes. Walk the small export tree until we find the actual Mongoose
-  // singleton (the object that owns connect(), Schema, and connection).
-  const queue = [moduleValue];
-  const seen = new Set();
-
-  while (queue.length) {
-    const candidate = queue.shift();
-    if (!candidate || (typeof candidate !== "object" && typeof candidate !== "function")) {
-      continue;
-    }
-    if (seen.has(candidate)) continue;
-    seen.add(candidate);
-
-    if (
-      typeof candidate.connect === "function" &&
-      typeof candidate.Schema === "function"
-    ) {
-      return candidate;
-    }
-
-    for (const key of ["default", "mongoose", "Mongoose", "module", "exports"]) {
-      try {
-        if (candidate[key]) queue.push(candidate[key]);
-      } catch {}
-    }
-  }
-
-  throw new Error("Mongoose module loaded, but its connect() API could not be resolved in Cloudflare Workers");
+if (
+  !mongoose ||
+  typeof mongoose.connect !== "function" ||
+  typeof mongoose.Schema !== "function"
+) {
+  throw new Error(
+    "Mongoose was not initialized by src/worker.mjs. Import mongoose as ESM before loading server.cjs."
+  );
 }
-
-const mongoose = resolveMongoose(mongooseModule);
 
 const getMongooseConnection = () =>
   mongoose?.connection || mongoose?.connections?.[0] || null;
