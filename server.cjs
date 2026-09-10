@@ -15,18 +15,35 @@ const mongooseModule = require("mongoose");
 // `default` layers. Find the actual Mongoose singleton instead of assuming
 // a particular interop shape.
 function resolveMongoose(moduleValue) {
-  let candidate = moduleValue;
-  for (let i = 0; i < 5 && candidate; i += 1) {
+  // Cloudflare can expose CommonJS/ESM packages through different wrapper
+  // shapes. Walk the small export tree until we find the actual Mongoose
+  // singleton (the object that owns connect(), Schema, and connection).
+  const queue = [moduleValue];
+  const seen = new Set();
+
+  while (queue.length) {
+    const candidate = queue.shift();
+    if (!candidate || (typeof candidate !== "object" && typeof candidate !== "function")) {
+      continue;
+    }
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+
     if (
       typeof candidate.connect === "function" &&
-      candidate.Schema &&
-      (candidate.connection || Array.isArray(candidate.connections))
+      typeof candidate.Schema === "function"
     ) {
       return candidate;
     }
-    candidate = candidate.default;
+
+    for (const key of ["default", "mongoose", "Mongoose", "module", "exports"]) {
+      try {
+        if (candidate[key]) queue.push(candidate[key]);
+      } catch {}
+    }
   }
-  return moduleValue;
+
+  throw new Error("Mongoose module loaded, but its connect() API could not be resolved in Cloudflare Workers");
 }
 
 const mongoose = resolveMongoose(mongooseModule);
