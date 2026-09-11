@@ -16,10 +16,11 @@ import compression from "compression";
 // that intentionally does not expose connect(). Importing the package root can
 // therefore become the browser build and cause "connect is not a function".
 // Import the real Node entry explicitly so Wrangler bundles the full Mongoose API.
-import mongoose from "mongoose/index.js";
+import mongooseCjs from "../node_modules/mongoose/index.js";
+const mongoose = mongooseCjs?.default || mongooseCjs?.mongoose || mongooseCjs;
 
-if (typeof mongoose?.connect !== "function" || !mongoose?.Schema) {
-  throw new Error("Full Node Mongoose API did not load in Cloudflare Workers.");
+if (typeof mongoose?.connect !== "function" || typeof mongoose?.Schema !== "function") {
+  throw new Error("Full Node Mongoose API did not load in Cloudflare Workers. Check the deployed node_modules bundle.");
 }
 
 const getMongooseConnection = () =>

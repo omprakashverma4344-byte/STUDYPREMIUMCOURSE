@@ -3,6 +3,7 @@
   "name": "studypremiumcourse",
   "main": "src/worker.mjs",
   "compatibility_date": "2026-09-10",
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
