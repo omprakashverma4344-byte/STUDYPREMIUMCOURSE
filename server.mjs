@@ -1,6 +1,6 @@
 // ============================================================
 // STUDY PREMIUM COURSE  - PRODUCTION BACKEND
-// File: server.mjs
+// File: server.cjs
 // ============================================================
 
 import dotenv from "dotenv";
@@ -11,17 +11,8 @@ import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
 // MongoDB is the database. Mongoose is the Node.js MongoDB library used by this backend.
-// IMPORTANT FOR CLOUDFLARE WORKERS:
-// Wrangler bundles for a browser/worker target. Mongoose declares a browser build
-// that intentionally does not expose connect(). Importing the package root can
-// therefore become the browser build and cause "connect is not a function".
-// Import the real Node entry explicitly so Wrangler bundles the full Mongoose API.
-import mongooseCjs from "../node_modules/mongoose/index.js";
-const mongoose = mongooseCjs?.default || mongooseCjs?.mongoose || mongooseCjs;
-
-if (typeof mongoose?.connect !== "function" || typeof mongoose?.Schema !== "function") {
-  throw new Error("Full Node Mongoose API did not load in Cloudflare Workers. Check the deployed node_modules bundle.");
-}
+// Import it directly as ESM for Cloudflare Workers.
+import mongoose from "./src/mongoose-worker.mjs";
 
 const getMongooseConnection = () =>
   mongoose?.connection || mongoose?.connections?.[0] || null;
