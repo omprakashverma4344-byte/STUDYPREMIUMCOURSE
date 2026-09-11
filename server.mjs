@@ -1,6 +1,6 @@
 // ============================================================
 // STUDY PREMIUM COURSE  - PRODUCTION BACKEND
-// File: server.cjs
+// File: server.mjs
 // ============================================================
 
 import dotenv from "dotenv";
@@ -11,8 +11,21 @@ import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
 // MongoDB is the database. Mongoose is the Node.js MongoDB library used by this backend.
-// Import it directly as ESM for Cloudflare Workers.
-import mongoose from "mongoose";
+// Cloudflare's Node compatibility layer can expose a CommonJS package through
+// more than one ESM interop layer. Resolve the actual Mongoose singleton
+// without changing the MongoDB connection/URI itself.
+import * as mongooseModule from "mongoose";
+
+const mongoose =
+  mongooseModule?.default?.default ||
+  mongooseModule?.default ||
+  mongooseModule;
+
+if (!mongoose?.connect || !mongoose?.Schema) {
+  throw new Error(
+    "Mongoose loaded, but the Cloudflare ESM/CommonJS interop did not expose the Mongoose API."
+  );
+}
 
 const getMongooseConnection = () =>
   mongoose?.connection || mongoose?.connections?.[0] || null;
