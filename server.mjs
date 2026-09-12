@@ -12,7 +12,7 @@ import helmet from "helmet";
 import compression from "compression";
 // MongoDB is the database. Mongoose is the Node.js MongoDB library used by this backend.
 // Import it directly as ESM for Cloudflare Workers.
-import mongoose from "./src/mongoose-worker.mjs";
+import mongoose, { withMongoRequest } from "./src/mongoose-worker.mjs";
 
 const getMongooseConnection = () =>
   mongoose?.connection || mongoose?.connections?.[0] || null;
@@ -2454,56 +2454,6 @@ app.get(
 // PUBLIC APPS
 // ============================================================
 
-function isTransientMongoError(error) {
-  const name = String(error?.name || "");
-  const message = String(error?.message || "");
-  return /Mongo(Network|ServerSelection|WaitQueue|Pool|Topology|WriteConcern)Error/i.test(name)
-    || /timed out|server selection|wait queue|connection.*closed|topology/i.test(message);
-}
-
-async function reloadDatabaseConnection() {
-  try {
-    await mongoose.disconnect();
-  } catch {}
-
-  if (!process.env.MONGODB_URI) {
-    throw new Error("MONGODB_URI is missing");
-  }
-
-  await mongoose.connect(process.env.MONGODB_URI, {
-    serverSelectionTimeoutMS: 15000,
-    connectTimeoutMS: 15000
-  });
-}
-
-async function findPublicApps(filter) {
-  try {
-    return await AppModel.find(filter)
-      .sort({
-        featured: -1,
-        trending: -1,
-        createdAt: -1
-      })
-      .lean();
-  } catch (error) {
-    // Atlas connections can become stale when a Worker isolate is reused.
-    // Reconnect once for network/pool errors instead of immediately showing
-    // "Could not load apps" to the user.
-    if (!isTransientAppMongoError(error)) throw error;
-
-    console.warn("PUBLIC APPS: transient MongoDB error; reconnecting once.");
-    await reloadDatabaseConnection();
-
-    return await AppModel.find(filter)
-      .sort({
-        featured: -1,
-        trending: -1,
-        createdAt: -1
-      })
-      .lean();
-  }
-}
-
 app.get(
   "/api/apps",
   async (req, res) => {
@@ -2533,7 +2483,14 @@ app.get(
         filter.upcoming = true;
       }
 
-      const apps = await findPublicApps(filter);
+      const apps =
+        await AppModel.find(filter)
+          .sort({
+            featured: -1,
+            trending: -1,
+            createdAt: -1
+          })
+          .lean();
 
       res.json(apps);
     } catch (error) {
@@ -3158,7 +3115,7 @@ async function expireBatchOwnerships() {
 }
 
 // Cloudflare Workers does not allow setInterval() in global scope.
-// Expiration is checked opportunistically from ensureDatabaseReady() instead.
+// Expiration is handled by the ownership checks in normal API flows; do not block every Worker API request with a cleanup job.
 
 
 // ALREADY PURCHASED / RESTORE ACCESS
@@ -4378,38 +4335,6 @@ app.post("/api/admin/orders/:id/upi-qr/reject", requireAdmin, async (req, res) =
 // ============================================================
 // PUBLIC LIVE VISITOR HEARTBEAT
 // ============================================================
-// Heartbeats are sent by every open page. Counting the entire visitors
-// collection on every heartbeat was creating unnecessary MongoDB load and
-// competing with /api/apps. Cache the three counters briefly instead.
-let analyticsSnapshot = {
-  liveUsers: 0,
-  totalVisitors: 0,
-  todayVisitors: 0
-};
-let analyticsSnapshotAt = 0;
-
-async function getAnalyticsSnapshot() {
-  const nowMs = Date.now();
-
-  if (nowMs - analyticsSnapshotAt < 30000) {
-    return analyticsSnapshot;
-  }
-
-  const liveSince = new Date(nowMs - 45 * 1000);
-  const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
-
-  const [liveUsers, totalVisitors, todayVisitors] = await Promise.all([
-    Visitor.countDocuments({ lastSeen: { $gte: liveSince } }),
-    Visitor.countDocuments(),
-    Visitor.countDocuments({ firstSeen: { $gte: todayStart } })
-  ]);
-
-  analyticsSnapshot = { liveUsers, totalVisitors, todayVisitors };
-  analyticsSnapshotAt = nowMs;
-
-  return analyticsSnapshot;
-}
-
 app.post("/api/analytics/heartbeat", async (req, res) => {
   try {
     const visitorId = String(req.body?.visitorId || "").trim().slice(0, 100);
@@ -4431,9 +4356,18 @@ app.post("/api/analytics/heartbeat", async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    const snapshot = await getAnalyticsSnapshot();
+    const liveSince = new Date(Date.now() - 45 * 1000);
+    const [liveUsers, totalVisitors, todayVisitors] = await Promise.all([
+      Visitor.countDocuments({ lastSeen: { $gte: liveSince } }),
+      Visitor.countDocuments(),
+      Visitor.countDocuments({
+        firstSeen: {
+          $gte: new Date(new Date().setHours(0, 0, 0, 0))
+        }
+      })
+    ]);
 
-    res.json(snapshot);
+    res.json({ liveUsers, totalVisitors, todayVisitors });
   } catch (error) {
     console.error("ANALYTICS HEARTBEAT ERROR:", error);
     res.status(500).json({ error: "Analytics unavailable" });
@@ -4442,8 +4376,13 @@ app.post("/api/analytics/heartbeat", async (req, res) => {
 
 app.get("/api/analytics/live", async (req, res) => {
   try {
-    const snapshot = await getAnalyticsSnapshot();
-    res.json(snapshot);
+    const liveSince = new Date(Date.now() - 45 * 1000);
+    const [liveUsers, totalVisitors, todayVisitors] = await Promise.all([
+      Visitor.countDocuments({ lastSeen: { $gte: liveSince } }),
+      Visitor.countDocuments(),
+      Visitor.countDocuments({ firstSeen: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } })
+    ]);
+    res.json({ liveUsers, totalVisitors, todayVisitors });
   } catch {
     res.status(500).json({ error: "Analytics unavailable" });
   }
@@ -5025,85 +4964,21 @@ async function ensurePurchasePlans(){
 // ============================================================
 // CLOUDFLARE WORKERS STARTUP
 // ============================================================
-// Workers cannot rely on a persistent local filesystem/process lifecycle.
-// The HTTP server is registered immediately; MongoDB initializes lazily on
-// the first API request and the connection promise is reused by the isolate.
+// MongoDB is opened per Worker request by src/worker.mjs. This avoids sharing
+// pending MongoDB promises/sockets between Cloudflare request contexts.
+// Do not perform admin/settings/demo seeding here because that would make every
+// public API request wait for unrelated database writes.
 
-let databaseReadyPromise = null;
-
-function isTransientAppMongoError(error) {
-  const name = String(error?.name || "");
-  const message = String(error?.message || "");
-  return /Mongo(Network|ServerSelection|WaitQueue|Pool|Topology|WriteConcern)Error/i.test(name)
-    || /timed out|server selection|wait queue|connection.*closed|topology/i.test(message);
-}
-
-async function sleep(ms) {
-  await new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function initializeDatabase() {
+async function ensureDatabaseReady() {
   if (!process.env.MONGODB_URI) {
     throw new Error("MONGODB_URI is missing");
   }
 
-  await mongoose.connect(process.env.MONGODB_URI, {
-    serverSelectionTimeoutMS: 15000,
-    connectTimeoutMS: 15000
-  });
-
-  await ensureAdmin();
-  await ensureSettings();
-  await ensureDemoApps();
-  await ensurePurchasePlans();
+  // Inside withMongoRequest() this is only a readiness check. For local Node
+  // execution it still creates the normal fallback connection.
+  await mongoose.connect(process.env.MONGODB_URI);
 }
 
-async function ensureDatabaseReady() {
-  const activeConnection = getMongooseConnection();
-  if (activeConnection?.readyState === 1) {
-    return;
-  }
-
-  if (databaseReadyPromise) return databaseReadyPromise;
-
-  databaseReadyPromise = (async () => {
-    let lastError;
-
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        await initializeDatabase();
-        return;
-      } catch (error) {
-        lastError = error;
-        console.error(
-          `Database initialization attempt ${attempt}/3 failed:`,
-          error
-        );
-
-        try {
-          await mongoose.disconnect();
-        } catch {}
-
-        if (!isTransientMongoError(error) || attempt === 3) {
-          throw error;
-        }
-
-        await sleep(attempt * 500);
-      }
-    }
-
-    throw lastError;
-  })().catch(error => {
-    databaseReadyPromise = null;
-    throw error;
-  });
-
-  return databaseReadyPromise;
-}
-
-// Inserted late in the middleware chain would miss routes, therefore this
-// readiness gate is exposed and called by the Worker wrapper before handing
-// API requests to Express.
 app.listen(PORT);
 
-export { app, PORT, ensureDatabaseReady };
+export { app, PORT, ensureDatabaseReady, withMongoRequest };

@@ -36,7 +36,7 @@
   }
 
   heartbeat();
-  setInterval(heartbeat, 30000);
+  setInterval(heartbeat, 60000);
   window.addEventListener("beforeunload", () => {
     // The server expires a visitor automatically after 45 seconds.
   });

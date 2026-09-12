@@ -18,9 +18,12 @@ export default {
 
     if (url.pathname.startsWith("/api/")) {
       try {
-        await legacy.ensureDatabaseReady();
+        return await legacy.withMongoRequest(workerEnv.MONGODB_URI, async () => {
+          await legacy.ensureDatabaseReady();
+          return expressHandler.fetch(request, workerEnv, ctx);
+        });
       } catch (error) {
-        console.error("Database initialization failed:", error);
+        console.error("API database request failed:", error);
         return Response.json(
           {
             error: "Database connection failed",
@@ -29,8 +32,6 @@ export default {
           { status: 503 }
         );
       }
-
-      return expressHandler.fetch(request, workerEnv, ctx);
     }
 
     return workerEnv.ASSETS.fetch(request);

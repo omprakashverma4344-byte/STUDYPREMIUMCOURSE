@@ -1,4 +1,5 @@
 import { MongoClient, ObjectId } from "mongodb";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 const MODEL_COLLECTIONS = {
   App: "apps",
@@ -22,6 +23,64 @@ const MODEL_COLLECTIONS = {
 let client = null;
 let db = null;
 let connectPromise = null;
+
+// Cloudflare Workers can process many requests in one isolate. A MongoDB
+// connection/promise created by one request must not leak into another request
+// context. Keep the request's client/database in AsyncLocalStorage instead.
+const requestMongo = new AsyncLocalStorage();
+
+function requestStore() {
+  return requestMongo.getStore() || null;
+}
+
+function activeDb() {
+  return requestStore()?.db || db || null;
+}
+
+function mongoOptions() {
+  return {
+    maxPoolSize: 2,
+    minPoolSize: 0,
+    maxIdleTimeMS: 5000,
+    serverSelectionTimeoutMS: 12000,
+    connectTimeoutMS: 12000,
+    socketTimeoutMS: 20000,
+    waitQueueTimeoutMS: 12000,
+    retryReads: true,
+    retryWrites: true
+  };
+}
+
+async function sleep(ms) {
+  await new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export async function withMongoRequest(uri, callback) {
+  if (!uri) throw new Error("MONGODB_URI is missing");
+
+  let lastError;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const requestClient = new MongoClient(uri, mongoOptions());
+    try {
+      await requestClient.connect();
+      const requestDb = requestClient.db();
+      await requestDb.command({ ping: 1 });
+
+      return await requestMongo.run(
+        { client: requestClient, db: requestDb },
+        callback
+      );
+    } catch (error) {
+      lastError = error;
+      console.error(`MongoDB request connection attempt ${attempt} failed:`, error);
+      if (attempt < 2) await sleep(250);
+    } finally {
+      try { await requestClient.close(); } catch {}
+    }
+  }
+
+  throw lastError || new Error("MongoDB connection failed");
+}
 
 function clone(value) {
   if (value === undefined || value === null) return value;
@@ -428,39 +487,29 @@ async function updateOneAndReturn(model, filter, update, returnNew) {
 }
 
 async function ensureConnected(uri) {
+  // In Cloudflare, withMongoRequest() establishes a request-scoped connection.
+  // mongoose.connect() therefore becomes a cheap readiness check for that request.
+  if (requestStore()?.db) return requestStore().db;
+
+  // Fallback for ordinary Node/local execution where there is no Worker request scope.
   if (db) return db;
   if (connectPromise) return connectPromise;
+
   connectPromise = (async () => {
     if (!uri) throw new Error("MONGODB_URI is missing");
-    client = new MongoClient(uri, {
-      // Cloudflare Workers can create many short-lived isolates. Keep the
-      // pool deliberately small so analytics requests cannot exhaust it.
-      maxPoolSize: 2,
-      minPoolSize: 0,
-      maxIdleTimeMS: 30000,
-      serverSelectionTimeoutMS: 15000,
-      connectTimeoutMS: 15000,
-      socketTimeoutMS: 20000,
-      waitQueueTimeoutMS: 10000,
-      retryReads: true,
-      retryWrites: true,
-      family: 4
-    });
-
+    client = new MongoClient(uri, mongoOptions());
     await client.connect();
-
-    // Force an initial round-trip so a "connected" client is only accepted
-    // after Atlas has actually answered.
-    await client.db().command({ ping: 1 });
-
     db = client.db();
+    await db.command({ ping: 1 });
     return db;
-  })().catch(error => {
+  })().catch(async error => {
+    try { await client?.close(); } catch {}
     connectPromise = null;
     client = null;
     db = null;
     throw error;
   });
+
   return connectPromise;
 }
 
@@ -487,8 +536,9 @@ function model(name, schema) {
     modelName: name,
     schema,
     get collection() {
-      if (!db) throw new Error("MongoDB is not connected");
-      return db.collection(collectionName);
+      const currentDb = activeDb();
+      if (!currentDb) throw new Error("MongoDB is not connected");
+      return currentDb.collection(collectionName);
     },
     find(filter = {}) { return new Query(wrapper, "find", [castFilter(filter, schema)]); },
     findOne(filter = {}) { return new Query(wrapper, "findOne", [castFilter(filter, schema)]); },
@@ -538,7 +588,7 @@ class Aggregate {
 }
 
 const connection = {
-  get readyState() { return db ? 1 : 0; }
+  get readyState() { return activeDb() ? 1 : 0; }
 };
 
 export const mongoose = {
