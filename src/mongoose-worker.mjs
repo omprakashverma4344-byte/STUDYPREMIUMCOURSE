@@ -433,15 +433,26 @@ async function ensureConnected(uri) {
   connectPromise = (async () => {
     if (!uri) throw new Error("MONGODB_URI is missing");
     client = new MongoClient(uri, {
-      maxPoolSize: 4,
+      // Cloudflare Workers can create many short-lived isolates. Keep the
+      // pool deliberately small so analytics requests cannot exhaust it.
+      maxPoolSize: 2,
       minPoolSize: 0,
-      maxIdleTimeMS: 10000,
-      serverSelectionTimeoutMS: 8000,
-      connectTimeoutMS: 8000,
-      socketTimeoutMS: 15000,
-      waitQueueTimeoutMS: 8000
+      maxIdleTimeMS: 30000,
+      serverSelectionTimeoutMS: 15000,
+      connectTimeoutMS: 15000,
+      socketTimeoutMS: 20000,
+      waitQueueTimeoutMS: 10000,
+      retryReads: true,
+      retryWrites: true,
+      family: 4
     });
+
     await client.connect();
+
+    // Force an initial round-trip so a "connected" client is only accepted
+    // after Atlas has actually answered.
+    await client.db().command({ ping: 1 });
+
     db = client.db();
     return db;
   })().catch(error => {

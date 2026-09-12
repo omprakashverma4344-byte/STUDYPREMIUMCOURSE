@@ -1,6 +1,6 @@
 // ============================================================
 // STUDY PREMIUM COURSE  - PRODUCTION BACKEND
-// File: server.cjs
+// File: server.mjs
 // ============================================================
 
 import dotenv from "dotenv";
@@ -2454,6 +2454,56 @@ app.get(
 // PUBLIC APPS
 // ============================================================
 
+function isTransientMongoError(error) {
+  const name = String(error?.name || "");
+  const message = String(error?.message || "");
+  return /Mongo(Network|ServerSelection|WaitQueue|Pool|Topology|WriteConcern)Error/i.test(name)
+    || /timed out|server selection|wait queue|connection.*closed|topology/i.test(message);
+}
+
+async function reloadDatabaseConnection() {
+  try {
+    await mongoose.disconnect();
+  } catch {}
+
+  if (!process.env.MONGODB_URI) {
+    throw new Error("MONGODB_URI is missing");
+  }
+
+  await mongoose.connect(process.env.MONGODB_URI, {
+    serverSelectionTimeoutMS: 15000,
+    connectTimeoutMS: 15000
+  });
+}
+
+async function findPublicApps(filter) {
+  try {
+    return await AppModel.find(filter)
+      .sort({
+        featured: -1,
+        trending: -1,
+        createdAt: -1
+      })
+      .lean();
+  } catch (error) {
+    // Atlas connections can become stale when a Worker isolate is reused.
+    // Reconnect once for network/pool errors instead of immediately showing
+    // "Could not load apps" to the user.
+    if (!isTransientAppMongoError(error)) throw error;
+
+    console.warn("PUBLIC APPS: transient MongoDB error; reconnecting once.");
+    await reloadDatabaseConnection();
+
+    return await AppModel.find(filter)
+      .sort({
+        featured: -1,
+        trending: -1,
+        createdAt: -1
+      })
+      .lean();
+  }
+}
+
 app.get(
   "/api/apps",
   async (req, res) => {
@@ -2483,14 +2533,7 @@ app.get(
         filter.upcoming = true;
       }
 
-      const apps =
-        await AppModel.find(filter)
-          .sort({
-            featured: -1,
-            trending: -1,
-            createdAt: -1
-          })
-          .lean();
+      const apps = await findPublicApps(filter);
 
       res.json(apps);
     } catch (error) {
@@ -4335,6 +4378,38 @@ app.post("/api/admin/orders/:id/upi-qr/reject", requireAdmin, async (req, res) =
 // ============================================================
 // PUBLIC LIVE VISITOR HEARTBEAT
 // ============================================================
+// Heartbeats are sent by every open page. Counting the entire visitors
+// collection on every heartbeat was creating unnecessary MongoDB load and
+// competing with /api/apps. Cache the three counters briefly instead.
+let analyticsSnapshot = {
+  liveUsers: 0,
+  totalVisitors: 0,
+  todayVisitors: 0
+};
+let analyticsSnapshotAt = 0;
+
+async function getAnalyticsSnapshot() {
+  const nowMs = Date.now();
+
+  if (nowMs - analyticsSnapshotAt < 30000) {
+    return analyticsSnapshot;
+  }
+
+  const liveSince = new Date(nowMs - 45 * 1000);
+  const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
+
+  const [liveUsers, totalVisitors, todayVisitors] = await Promise.all([
+    Visitor.countDocuments({ lastSeen: { $gte: liveSince } }),
+    Visitor.countDocuments(),
+    Visitor.countDocuments({ firstSeen: { $gte: todayStart } })
+  ]);
+
+  analyticsSnapshot = { liveUsers, totalVisitors, todayVisitors };
+  analyticsSnapshotAt = nowMs;
+
+  return analyticsSnapshot;
+}
+
 app.post("/api/analytics/heartbeat", async (req, res) => {
   try {
     const visitorId = String(req.body?.visitorId || "").trim().slice(0, 100);
@@ -4356,18 +4431,9 @@ app.post("/api/analytics/heartbeat", async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    const liveSince = new Date(Date.now() - 45 * 1000);
-    const [liveUsers, totalVisitors, todayVisitors] = await Promise.all([
-      Visitor.countDocuments({ lastSeen: { $gte: liveSince } }),
-      Visitor.countDocuments(),
-      Visitor.countDocuments({
-        firstSeen: {
-          $gte: new Date(new Date().setHours(0, 0, 0, 0))
-        }
-      })
-    ]);
+    const snapshot = await getAnalyticsSnapshot();
 
-    res.json({ liveUsers, totalVisitors, todayVisitors });
+    res.json(snapshot);
   } catch (error) {
     console.error("ANALYTICS HEARTBEAT ERROR:", error);
     res.status(500).json({ error: "Analytics unavailable" });
@@ -4376,13 +4442,8 @@ app.post("/api/analytics/heartbeat", async (req, res) => {
 
 app.get("/api/analytics/live", async (req, res) => {
   try {
-    const liveSince = new Date(Date.now() - 45 * 1000);
-    const [liveUsers, totalVisitors, todayVisitors] = await Promise.all([
-      Visitor.countDocuments({ lastSeen: { $gte: liveSince } }),
-      Visitor.countDocuments(),
-      Visitor.countDocuments({ firstSeen: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } })
-    ]);
-    res.json({ liveUsers, totalVisitors, todayVisitors });
+    const snapshot = await getAnalyticsSnapshot();
+    res.json(snapshot);
   } catch {
     res.status(500).json({ error: "Analytics unavailable" });
   }
@@ -4969,46 +5030,70 @@ async function ensurePurchasePlans(){
 // the first API request and the connection promise is reused by the isolate.
 
 let databaseReadyPromise = null;
-let lastOwnershipExpiryCheck = 0;
+
+function isTransientAppMongoError(error) {
+  const name = String(error?.name || "");
+  const message = String(error?.message || "");
+  return /Mongo(Network|ServerSelection|WaitQueue|Pool|Topology|WriteConcern)Error/i.test(name)
+    || /timed out|server selection|wait queue|connection.*closed|topology/i.test(message);
+}
+
+async function sleep(ms) {
+  await new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function initializeDatabase() {
+  if (!process.env.MONGODB_URI) {
+    throw new Error("MONGODB_URI is missing");
+  }
+
+  await mongoose.connect(process.env.MONGODB_URI, {
+    serverSelectionTimeoutMS: 15000,
+    connectTimeoutMS: 15000
+  });
+
+  await ensureAdmin();
+  await ensureSettings();
+  await ensureDemoApps();
+  await ensurePurchasePlans();
+}
 
 async function ensureDatabaseReady() {
   const activeConnection = getMongooseConnection();
   if (activeConnection?.readyState === 1) {
-    // Replace the old process-level interval with a lightweight,
-    // request-triggered check that is safe in Cloudflare Workers.
-    if (Date.now() - lastOwnershipExpiryCheck >= 60 * 1000) {
-      lastOwnershipExpiryCheck = Date.now();
-      try {
-        await expireBatchOwnerships();
-      } catch (error) {
-        console.error("AUTO EXPIRE BATCH OWNERSHIPS ERROR:", error);
-      }
-    }
     return;
   }
+
   if (databaseReadyPromise) return databaseReadyPromise;
 
   databaseReadyPromise = (async () => {
-    if (!process.env.MONGODB_URI) {
-      throw new Error("MONGODB_URI is missing");
+    let lastError;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await initializeDatabase();
+        return;
+      } catch (error) {
+        lastError = error;
+        console.error(
+          `Database initialization attempt ${attempt}/3 failed:`,
+          error
+        );
+
+        try {
+          await mongoose.disconnect();
+        } catch {}
+
+        if (!isTransientMongoError(error) || attempt === 3) {
+          throw error;
+        }
+
+        await sleep(attempt * 500);
+      }
     }
 
-    await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 10000,
-      connectTimeoutMS: 10000
-    });
-
-    await ensureAdmin();
-    await ensureSettings();
-    await ensureDemoApps();
-    await ensurePurchasePlans();
-    lastOwnershipExpiryCheck = Date.now();
-    try {
-      await expireBatchOwnerships();
-    } catch (error) {
-      console.error("AUTO EXPIRE BATCH OWNERSHIPS ERROR:", error);
-    }
-  })().catch((error) => {
+    throw lastError;
+  })().catch(error => {
     databaseReadyPromise = null;
     throw error;
   });
